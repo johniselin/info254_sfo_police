@@ -16,12 +16,10 @@ We combine data from the following datasets:
     * https://data.sfgov.org/Public-Safety/Police-Department-Incident-Reports-Historical-2003/tmnf-yvry
 * Police Department Incident Reports: 2018 to Present
     * https://data.sfgov.org/Public-Safety/Police-Department-Incident-Reports-2018-to-Present/wg3w-h783
-* Police Department Calls for Service
+* Police Department Calls for Service (FUTURE RESEARCH)
     * https://data.sfgov.org/Public-Safety/Police-Department-Calls-for-Service/hz9m-tj6z
 
 ## Notes
-
-* The CSV form of the data are too large to have on github, we will need to set up a system using the Data SF API. 
 
 
 ## Authors 
