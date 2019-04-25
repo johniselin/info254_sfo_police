@@ -18,6 +18,13 @@ We combine data from the following datasets:
     * https://data.sfgov.org/Public-Safety/Police-Department-Incident-Reports-2018-to-Present/wg3w-h783
 * Police Department Calls for Service (FUTURE RESEARCH)
     * https://data.sfgov.org/Public-Safety/Police-Department-Calls-for-Service/hz9m-tj6z
+* Census 2010: Blocks for San Francisco
+   * https://data.sfgov.org/Geographic-Locations-and-Boundaries/Census-2010-Blocks-for-San-Francisco/2uzy-uv2r
+* Census 2010: Tracts for San Francisco
+   * https://data.sfgov.org/Geographic-Locations-and-Boundaries/Census-2010-Tracts-for-San-Francisco/rarb-5ahf
+* NOAA National Center for Environmental Information Data Request - Weather Data
+   * https://www.ncdc.noaa.gov/cdo-web/
+
 
 ## Notes
 
