@@ -2,6 +2,8 @@ import numpy as np
 import pandas as pd
 import geopandas as gpd
 from shapely.geometry import Point
+import feather
+from tqdm import tqdm
 
 
 def exchange_coordinate(df, lon, lat, prefix):
@@ -75,3 +77,48 @@ def add_weather(geodf, weather_day):
     geodf = pd.merge(geodf, weather_day, how="left", on="date")
 
     return geodf
+
+
+def load_rnn_data(path, window, predict_ts):
+    """
+    return y_all and x_all of given path
+    """
+    # load data
+    df = feather.read_dataframe(path)
+    df.sort_values(by=["datetime", "geoid10_tract"], inplace=True)
+    df.set_index("datetime", inplace=True)
+
+    # output columns
+    if "crime" in df.columns:
+        y_cols = ["crime"]
+    elif "incident_type_1" in df.columns:
+        y_cols = ["incident_type_0", "incident_type_1", "incident_type_2"]
+
+    # geo column
+    if "geoid10_tract" in df.columns:
+        geo_col = ["geoid10_tract"]
+    elif "geoid10_block" in df.columns:
+        geo_col = ["geoid10_block"]
+
+    # input columns
+    x_cols = list(df.drop(y_cols + geo_col, axis=1).columns)
+
+    # group by geoid
+    geo_grs = df.groupby(by=geo_col)
+
+    # arrayes to store x and y
+    # (window size, input size, no of tracts, no of timesteps)
+    x_all = np.empty(shape=(window, len(x_cols + y_cols), len(geo_grs), len(df) - window - predict_ts + 1))
+
+    # (output size, no of tracts, no of timesteps)
+    y_all = np.empty(shape=(len(y_cols), len(geo_grs), len(df) - window - predict_ts + 1,))
+
+    for i, (_, gr) in enumerate(tqdm(geo_grs)):
+        x_values = gr[y_cols + x_cols].values
+        y_values = gr[y_cols].values
+
+        for j in range(window, len(gr) - predict_ts + 1):
+            x_all[:, :, i, j] = x_values[j - window:j, :]
+            y_all[:, i, j] = y_values[j + predict_ts - 1, :]
+
+    return x_all, y_all

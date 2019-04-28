@@ -1,6 +1,7 @@
 # project specific
 takuma_ws
 data/crime_counts/*.feather
+features/*.feather
 .idea
 .DS_Store
 
