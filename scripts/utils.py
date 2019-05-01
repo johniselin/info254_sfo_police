@@ -4,6 +4,9 @@ import geopandas as gpd
 from shapely.geometry import Point
 import feather
 from tqdm import tqdm
+from sklearn.model_selection import TimeSeriesSplit
+from sklearn.metrics import accuracy_score, log_loss
+from copy import deepcopy
 
 
 def exchange_coordinate(df, lon, lat, prefix):
@@ -120,3 +123,79 @@ def load_rnn_data(path, window, predict_ts, geo_col=["geoid10_tract"], y_cols=["
             y_all[:, i, j - window] = y_values[j + predict_ts - 1, :]
 
     return x_all, y_all, geo_ids, y_datetime
+
+
+def time_series_cv(x_all, y_all, n_splits = 5, model=None, fit_params=None, baseline=False):
+    """
+    :param baseline: True or False (defualt: False)
+    :return: train and test scores and prediction of y on test data
+    """
+
+    # prepare dictionary to store scores
+    train_scores = {}
+    metrics = ["acc", "log_loss"]
+    for metric in metrics:
+        train_scores[metric] = []
+    test_scores = deepcopy(train_scores)
+
+    # prepare dictionary to store predictions
+    y_test_preds = np.empty_like(y_all)
+
+    # time series split
+    tss = TimeSeriesSplit(n_splits=n_splits)
+
+    for split, (train_idx, test_idx) in enumerate(tss.split(x_all, y_all)):
+
+        print("---------- split {0} ----------".format(split))
+        print("train_index:{0}~{1} test_index:{2}~{3}".format(train_idx[0], train_idx[-1], test_idx[0], test_idx[-1]))
+
+        # create train and test set
+        x_train = x_all[:train_idx[-1]]
+        y_train = y_all[:train_idx[-1]]
+        x_test = x_all[test_idx[0]:test_idx[-1]]
+        y_test = y_all[test_idx[0]:test_idx[-1]]
+
+        if baseline:
+            # return 0 for all predicted probabiliby
+            y_train_prob = np.zeros_like(y_train)
+            y_test_prob = np.zeros_like(y_test)
+
+            # return 0 for all binary predictions
+            y_train_pred = np.zeros_like(y_train)
+            y_test_pred = np.zeros_like(y_test)
+
+        else:
+            # train
+            model.fit(x_train, y_train, **fit_params)
+
+            # predict
+            y_train_prob = model.predict(x_train)
+            y_test_prob = model.predict(x_test)
+
+            # convert form probability to binary
+            y_train_pred = np.fix(y_train_prob)
+            y_test_pred = np.fix(y_test_prob)
+
+        # store test prediction
+        y_test_preds[test_idx[0]:test_idx[-1]] = y_test_pred
+
+        # calculate metrics
+        train_log_loss = log_loss(y_train.flatten(), y_train_prob.flatten())
+        test_log_loss = log_loss(y_test.flatten(), y_test_prob.flatten())
+        train_acc = accuracy_score(y_train.flatten(), y_train_pred.flatten())
+        test_acc = accuracy_score(y_test.flatten(), y_test_pred.flatten())
+
+        # store scores
+        train_scores["log_loss"].append(train_log_loss)
+        test_scores["log_loss"].append(test_log_loss)
+        train_scores["acc"].append(train_acc)
+        test_scores["acc"].append(test_acc)
+
+        print("train_log_loss:{} test_log_loss:{}".format(train_log_loss, test_log_loss))
+        print("train_acc:{} test_acc:{}\n".format(train_acc, test_acc))
+
+        # convert to dataframe
+        train_scores_df = pd.DataFrame(train_scores)
+        test_scores_df = pd.DataFrame(test_scores)
+
+    return train_scores_df, test_scores_df, y_test_preds
