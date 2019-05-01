@@ -79,26 +79,16 @@ def add_weather(geodf, weather_day):
     return geodf
 
 
-def load_rnn_data(path, window, predict_ts):
+def load_rnn_data(path, window, predict_ts, geo_col=["geoid10_tract"], y_cols=["crime"]):
     """
+    y_cols: ["crime"] or ["incident_type_0", "incident_type_1", "incident_type_2"]
+    geo_col: ["geoid10_tract"] or ["geoid10_block"]
     return y_all and x_all of given path
     """
     # load data
     df = feather.read_dataframe(path)
     df.sort_values(by=["datetime", "geoid10_tract"], inplace=True)
     df.set_index("datetime", inplace=True)
-
-    # output columns
-    if "crime" in df.columns:
-        y_cols = ["crime"]
-    elif "incident_type_1" in df.columns:
-        y_cols = ["incident_type_0", "incident_type_1", "incident_type_2"]
-
-    # geo column
-    if "geoid10_tract" in df.columns:
-        geo_col = ["geoid10_tract"]
-    elif "geoid10_block" in df.columns:
-        geo_col = ["geoid10_block"]
 
     # input columns
     x_cols = list(df.drop(y_cols + geo_col, axis=1).columns)
@@ -108,17 +98,25 @@ def load_rnn_data(path, window, predict_ts):
 
     # arrayes to store x and y
     # (window size, input size, no of tracts, no of timesteps)
-    x_all = np.empty(shape=(window, len(x_cols + y_cols), len(geo_grs), len(df) - window - predict_ts + 1))
+    n_timesteps = int(len(df) / len(geo_grs)) - window - predict_ts + 1
+    x_all = np.empty(shape=(window, len(x_cols + y_cols), len(geo_grs), n_timesteps))
 
     # (output size, no of tracts, no of timesteps)
-    y_all = np.empty(shape=(len(y_cols), len(geo_grs), len(df) - window - predict_ts + 1,))
+    y_all = np.empty(shape=(len(y_cols), len(geo_grs), n_timesteps))
 
-    for i, (_, gr) in enumerate(tqdm(geo_grs)):
+    # to store geo_ids and y_all's datetime
+    geo_ids = []
+
+    y_datetime = df.index.unique()[window + predict_ts - 1:]
+
+    for i, (geo_id, gr) in enumerate(tqdm(geo_grs)):
+        geo_ids.append(geo_id)
         x_values = gr[y_cols + x_cols].values
         y_values = gr[y_cols].values
 
         for j in range(window, len(gr) - predict_ts + 1):
-            x_all[:, :, i, j] = x_values[j - window:j, :]
-            y_all[:, i, j] = y_values[j + predict_ts - 1, :]
+            # generate x_all
+            x_all[:, :, i, j - window] = x_values[j - window:j, :]
+            y_all[:, i, j - window] = y_values[j + predict_ts - 1, :]
 
-    return x_all, y_all
+    return x_all, y_all, geo_ids, y_datetime
