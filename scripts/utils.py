@@ -7,6 +7,7 @@ from tqdm import tqdm
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.metrics import accuracy_score, log_loss
 from copy import deepcopy
+from datetime import datetime
 
 
 def exchange_coordinate(df, lon, lat, prefix):
@@ -82,7 +83,7 @@ def add_weather(geodf, weather_day):
     return geodf
 
 
-def load_rnn_data(path, window, predict_ts, geo_col=["geoid10_tract"], y_cols=["crime"]):
+def load_rnn_data(path, window, predict_ts, isdim3=True, geo_col=["geoid10_tract"], y_cols=["crime"]):
     """
     y_cols: ["crime"] or ["incident_type_0", "incident_type_1", "incident_type_2"]
     geo_col: ["geoid10_tract"] or ["geoid10_block"]
@@ -100,12 +101,12 @@ def load_rnn_data(path, window, predict_ts, geo_col=["geoid10_tract"], y_cols=["
     geo_grs = df.groupby(by=geo_col)
 
     # arrayes to store x and y
-    # (window size, input size, no of tracts, no of timesteps)
+    # (no of timesteps, window size, no of tracts,  no of features, )
     n_timesteps = int(len(df) / len(geo_grs)) - window - predict_ts + 1
-    x_all = np.empty(shape=(window, len(x_cols + y_cols), len(geo_grs), n_timesteps))
+    x_all = np.empty(shape=(n_timesteps, window, len(geo_grs), len(x_cols + y_cols)))
 
-    # (output size, no of tracts, no of timesteps)
-    y_all = np.empty(shape=(len(y_cols), len(geo_grs), n_timesteps))
+    # (output size, no of tracts, no of outputs)
+    y_all = np.empty(shape=(n_timesteps, len(geo_grs), len(y_cols)))
 
     # to store geo_ids and y_all's datetime
     geo_ids = []
@@ -119,13 +120,19 @@ def load_rnn_data(path, window, predict_ts, geo_col=["geoid10_tract"], y_cols=["
 
         for j in range(window, len(gr) - predict_ts + 1):
             # generate x_all
-            x_all[:, :, i, j - window] = x_values[j - window:j, :]
-            y_all[:, i, j - window] = y_values[j + predict_ts - 1, :]
+            x_all[j - window, :, i, :] = x_values[j - window:j, :]
+            y_all[j - window, i, :] = y_values[j + predict_ts - 1, :]
+
+    if isdim3:
+        x_all = np.reshape(x_all,
+                           newshape=(x_all.shape[0], x_all.shape[1], x_all.shape[2] * x_all.shape[3]))
+        y_all = np.reshape(y_all,
+                           newshape=(y_all.shape[0], y_all.shape[1] * y_all.shape[2]))
 
     return x_all, y_all, geo_ids, y_datetime
 
 
-def time_series_cv(x_all, y_all, n_splits = 5, model=None, fit_params=None, baseline=False):
+def time_series_cv(x_all, y_all, n_splits=5, model=None, fit_params=None, baseline=False):
     """
     :param baseline: True or False (defualt: False)
     :return: train and test scores and prediction of y on test data
@@ -139,7 +146,7 @@ def time_series_cv(x_all, y_all, n_splits = 5, model=None, fit_params=None, base
     test_scores = deepcopy(train_scores)
 
     # prepare dictionary to store predictions
-    y_test_preds = np.empty_like(y_all)
+    y_test_probs = np.zeros_like(y_all)
 
     # time series split
     tss = TimeSeriesSplit(n_splits=n_splits)
@@ -147,7 +154,8 @@ def time_series_cv(x_all, y_all, n_splits = 5, model=None, fit_params=None, base
     for split, (train_idx, test_idx) in enumerate(tss.split(x_all, y_all)):
 
         print("---------- split {0} ----------".format(split))
-        print("train_index:{0}~{1} test_index:{2}~{3}".format(train_idx[0], train_idx[-1], test_idx[0], test_idx[-1]))
+        print("[{0:%H:%M:%S}] train_index:{1}~{2} test_index:{3}~{4}".format(
+            datetime.now(), train_idx[0], train_idx[-1], test_idx[0], test_idx[-1]))
 
         # create train and test set
         x_train = x_all[:train_idx[-1]]
@@ -177,7 +185,7 @@ def time_series_cv(x_all, y_all, n_splits = 5, model=None, fit_params=None, base
             y_test_pred = np.fix(y_test_prob)
 
         # store test prediction
-        y_test_preds[test_idx[0]:test_idx[-1]] = y_test_pred
+        y_test_probs[test_idx[0]:test_idx[-1]] = y_test_prob
 
         # calculate metrics
         train_log_loss = log_loss(y_train.flatten(), y_train_prob.flatten())
@@ -191,11 +199,13 @@ def time_series_cv(x_all, y_all, n_splits = 5, model=None, fit_params=None, base
         train_scores["acc"].append(train_acc)
         test_scores["acc"].append(test_acc)
 
-        print("train_log_loss:{} test_log_loss:{}".format(train_log_loss, test_log_loss))
-        print("train_acc:{} test_acc:{}\n".format(train_acc, test_acc))
+        print("[{0:%H:%M:%S}] train_log_loss:{1} test_log_loss:{2}".format(
+            datetime.now(), train_log_loss, test_log_loss))
+        print("[{0:%H:%M:%S}] train_acc:{1} test_acc:{2}\n".format(
+            datetime.now(), train_acc, test_acc))
 
         # convert to dataframe
         train_scores_df = pd.DataFrame(train_scores)
         test_scores_df = pd.DataFrame(test_scores)
 
-    return train_scores_df, test_scores_df, y_test_preds
+    return train_scores_df, test_scores_df, y_test_probs
