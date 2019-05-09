@@ -24,9 +24,22 @@ We combine data from the following datasets:
    * https://data.sfgov.org/Geographic-Locations-and-Boundaries/Census-2010-Tracts-for-San-Francisco/rarb-5ahf
 * NOAA National Center for Environmental Information Data Request - Weather Data
    * https://www.ncdc.noaa.gov/cdo-web/
+* US Census ACS 5-Year estimates (2013-2017) 
+   * https://nhgis.org/ 
 
 
-## Notes
+## Process
+
+Please run the notebooks in the following order:
+
+* dataset_creation.ipynb
+* dataset_modification.ipynb
+* dataset_feature_engineering.ipynb
+* dataset_visulization.ipynb
+* model_tuning.ipynb
+* RNN_with_cv.ipynb
+* model_result_visualization.ipynb
+* model_results_census_vis.ipynb
 
 
 ## Authors 
